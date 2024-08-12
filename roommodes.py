@@ -19,7 +19,9 @@ if sys.version_info < min_py:
 import argparse
 import contextlib
 import getpass
+import itertools
 import math
+from   pprint import pprint
 
 ###
 # From hpclib
@@ -40,16 +42,30 @@ __status__ = 'in progress'
 __license__ = 'MIT'
 
 
-def speed_of_sound(temperature:float, humidity:float) -> float:
-    return 331.3 * math.sqrt(1+temperature/273.15) * (1 + 0.0124 * humidity)
+def axial_mode_freq(dimension:float, n:int=4, cs:float=343) -> tuple:
+    """
+    Generator to provide the axial mode frequency along the 
+    dimension given.
 
+    dimension -- in meteres
+    n         -- number of modes to consider
+    cs        -- in meters / second
 
-def calculate_room_modes(length:float, width:float, height:float, 
-    x:float, y:float, z:float, 
-    speed_of_sound=343) -> float:
-    # Calculate the frequency of the room mode
-    return ((speed_of_sound / 2) * 
+    returns   -- tuple of Hz
+    """
+    return tuple((cs / 2 * i / dimension) for i in range(1,n+1))
+
+def complex_mode_freq(*, 
+    length:float=0, width:float=0, height:float=0, cs:float=343) -> float:
+    """
+    Calculate oblique or tangential mode frequencies.
+    """
+    mode_number = 0
+    while True:
+        mode_number += 1
+        yield ((speed_of_sound / 2) * 
         math.sqrt((x / length) ** 2 + (y / width) ** 2 + (z / height) ** 2))
+
 
 def calculate_speaker_position(length:float, width:float, height:float, 
     x_pos:float, y_pos:float, z_pos:float, cs:float, n:int) -> dict:
@@ -57,27 +73,46 @@ def calculate_speaker_position(length:float, width:float, height:float,
     Return a dict whose keys are length, width, and height (x, y, z), and whose
     values are tuples of length n. 
     """
-    
-    modes_x = tuple((calculate_room_modes(length, width, height, i, 0, 0, cs) for i in range(1, n+1)))
-    modes_y = tuple((calculate_room_modes(length, width, height, 0, i, 0, cs) for i in range(1, n+1)))
-    modes_z = tuple((calculate_room_modes(length, width, height, 0, 0, i, cs) for i in range(1, n+1)))
 
+    modes_x = axial_mode_freq(length, n, cs)
+    modes_y = axial_mode_freq(width, n, cs)
+    modes_z = axial_mode_freq(height, n, cs)
+    
     print(f"""
         {modes_x=}
         {modes_y=}
         {modes_z=}
         """)
-    
-    # Check how close the speaker is to these modes
-    proximity_x = tuple((round(abs(x_pos - (i * length / 2)), 1) for i in modes_x))
-    proximity_y = tuple((round(abs(y_pos - (i * width / 2)), 1) for i in modes_y))
-    proximity_z = tuple((round(abs(z_pos - (i * height / 2)), 1) for i in modes_z))
-    
+
+    proximity_x, proximity_y, proximity_z = ([], [], [])
+
+    for i, f in enumerate(modes_x, 1):
+        wavelength = cs / f
+        node_positions = [(n * wavelength / 2) for n in range(1, int(length / (wavelength / 2)) + 1)]
+        distances = [abs(x_pos - node_pos) for node_pos in node_positions]
+        proximity_x.append((min(distances), f))
+
+    for i, f in enumerate(modes_y, 1):
+        wavelength = cs / f
+        node_positions = [(n * wavelength / 2) for n in range(1, int(length / (wavelength / 2)) + 1)]
+        distances = [abs(y_pos - node_pos) for node_pos in node_positions]
+        proximity_y.append((min(distances), f))
+
+    for i, f in enumerate(modes_z, 1):
+        wavelength = cs / f
+        node_positions = [(n * wavelength / 2) for n in range(1, int(length / (wavelength / 2)) + 1)]
+        distances = [abs(z_pos - node_pos) for node_pos in node_positions]
+        proximity_z.append((min(distances), f))
+
     return {
         'x' : proximity_x,
         'y' : proximity_y,
         'z' : proximity_z
         }
+
+
+def speed_of_sound(temperature:float, humidity:float) -> float:
+    return 331.3 * math.sqrt(1+temperature/273.15) * (1 + 0.0124 * humidity)
 
 
 
@@ -96,13 +131,17 @@ def roommodes_main(myargs:argparse.Namespace) -> int:
         print("height, width, and length should all be non-negative")
         return os.EX_DATAERR
 
+    if not 0 < myargs.rh < 1.0:
+        print(f"RH of {myargs.rh} is outside 0 < rh < 1")
+        return os.EX_DATAERR
+
     cs = speed_of_sound(myargs.temp, myargs.rh)
     answer = calculate_speaker_position(
         myargs.length, myargs.width, myargs.height, 
         myargs.xpos, myargs.ypos, myargs.zpos, cs, myargs.n
         )
     
-    print(f"{answer=}")
+    pprint(answer)
 
     return os.EX_OK
 
@@ -119,7 +158,7 @@ if __name__ == '__main__':
 
 
     parser.add_argument('-n', type=int, default=4,
-        help="Number of harmonics to consider. Default is 4.")
+        help="Number of axial harmonics to consider. Default is 4.")
 
     parser.add_argument('-ht', '--height', type=float, default=2.5,
         help="Height of the ceiling in meters. Default is 2.5")
