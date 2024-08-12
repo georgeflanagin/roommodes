@@ -58,15 +58,20 @@ def calculate_speaker_position(length:float, width:float, height:float,
     values are tuples of length n. 
     """
     
-    # Generator expressions to invoke calculate_room_modes.
-    modes_x = (calculate_room_modes(length, width, height, i, 0, 0, cs) for i in range(1, n+1))
-    modes_y = (calculate_room_modes(length, width, height, 0, i, 0, cs) for i in range(1, n+1))
-    modes_z = (calculate_room_modes(length, width, height, 0, 0, 1, cs) for i in range(1, n+1))
+    modes_x = tuple((calculate_room_modes(length, width, height, i, 0, 0, cs) for i in range(1, n+1)))
+    modes_y = tuple((calculate_room_modes(length, width, height, 0, i, 0, cs) for i in range(1, n+1)))
+    modes_z = tuple((calculate_room_modes(length, width, height, 0, 0, i, cs) for i in range(1, n+1)))
+
+    print(f"""
+        {modes_x=}
+        {modes_y=}
+        {modes_z=}
+        """)
     
     # Check how close the speaker is to these modes
-    proximity_x = tuple((abs(x_pos - (i * length / 2)) for i in modes_x))
-    proximity_y = tuple((abs(y_pos - (i * width / 2)) for i in modes_y))
-    proximity_z = tuple((abs(z_pos - (i * height / 2)) for i in modes_z))
+    proximity_x = tuple((round(abs(x_pos - (i * length / 2)), 1) for i in modes_x))
+    proximity_y = tuple((round(abs(y_pos - (i * width / 2)), 1) for i in modes_y))
+    proximity_z = tuple((round(abs(z_pos - (i * height / 2)), 1) for i in modes_z))
     
     return {
         'x' : proximity_x,
@@ -94,7 +99,7 @@ def roommodes_main(myargs:argparse.Namespace) -> int:
     cs = speed_of_sound(myargs.temp, myargs.rh)
     answer = calculate_speaker_position(
         myargs.length, myargs.width, myargs.height, 
-        x_pos, y_pos, z_pos, cs, myargs.n
+        myargs.xpos, myargs.ypos, myargs.zpos, cs, myargs.n
         )
     
     print(f"{answer=}")
@@ -118,9 +123,9 @@ if __name__ == '__main__':
 
     parser.add_argument('-ht', '--height', type=float, default=2.5,
         help="Height of the ceiling in meters. Default is 2.5")
-    parser.add_argument('-l', '--length', type=float, default=0,
+    parser.add_argument('-l', '--length', type=float, default=8.4,
         help="Length of the room in meters.")
-    parser.add_argument('-w', '--width', type=float, default=0,
+    parser.add_argument('-w', '--width', type=float, default=6.1,
         help="Width of the room in meters.")
 
 
