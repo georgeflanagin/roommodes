@@ -1,8 +1,11 @@
 # -*- coding: utf-8 -*-
+"""
+roommodes is a program to place speakers in rectangular rooms.
+"""
 import typing
 from   typing import *
 
-min_py = (3, 8)
+min_py = (3, 11)
 
 ###
 # Standard imports, starting with os and sys
@@ -20,14 +23,24 @@ import argparse
 import contextlib
 import getpass
 import itertools
+import logging
 import math
 from   pprint import pprint
+import tomllib
 
 ###
 # From hpclib
 ###
 import linuxutils
-from   urdecorators import show_exceptions_and_frames as trap
+from   sloppytree import SloppyTree
+from   urdecorators import trap
+from   urlogger import URLogger
+
+###
+# Globals
+###
+logger = None
+
 
 ###
 # Credits
@@ -54,6 +67,7 @@ def axial_mode_freq(dimension:float, n:int=4, cs:float=343) -> tuple:
     returns   -- tuple of Hz
     """
     return tuple((cs / 2 * i / dimension) for i in range(1,n+1))
+
 
 def complex_mode_freq(*, 
     length:float=0, width:float=0, height:float=0, cs:float=343) -> float:
@@ -117,25 +131,33 @@ def speed_of_sound(temperature:float, humidity:float) -> float:
 
 
 @trap
-def roommodes_main(myargs:argparse.Namespace) -> int:
+def roommodes_main(myargs:SloppyTree) -> int:
     """
     Calculate room modes and the effects on and by speaker
     position. Speaker is considered to be a point source, and an
     omnidirectional radiator.
     """
+    global logger
+    config_error = False
+
     if not all (_ > 0 for _ in (myargs.xpos, myargs.ypos, myargs.zpos)):
-        print("x, y, and z should all be non-negative")
-        return os.EX_DATAERR
+        logger.error("x, y, and z should all be non-negative")
+        config_error = True
 
     if not all(_ > 0 for _ in (myargs.height, myargs.length, myargs.width)):
-        print("height, width, and length should all be non-negative")
-        return os.EX_DATAERR
+        logger.error("height, width, and length should all be non-negative")
+        config_error = True
 
     if not 0 < myargs.rh < 1.0:
-        print(f"RH of {myargs.rh} is outside 0 < rh < 1")
-        return os.EX_DATAERR
+        logger.error(f"RH of {myargs.rh} is outside 0 < rh < 1")
+        config_error = True
 
+    if config_error:
+        sys.stderr.write('Found a config error. Check {str(logger)}\n')
+        sys.exit(os.EX_CONFIG)
+    
     cs = speed_of_sound(myargs.temp, myargs.rh)
+    logger.info(f"Speed of sound is {cs} m/s")
     answer = calculate_speaker_position(
         myargs.length, myargs.width, myargs.height, 
         myargs.xpos, myargs.ypos, myargs.zpos, cs, myargs.n
@@ -147,39 +169,47 @@ def roommodes_main(myargs:argparse.Namespace) -> int:
 
 
 if __name__ == '__main__':
+
+    here       = os.getcwd()
+    progname   = os.path.basename(__file__)[:-3]
+    configfile = f"{here}/{progname}.toml"
+    logfile    = f"{here}/{progname}.log"
+    lockfile   = f"{here}/{progname}.lock"
     
     parser = argparse.ArgumentParser(prog="roommodes", 
         description="What roommodes does, roommodes does best.")
 
-    parser.add_argument('--temp', type=float, default=23.0,
-        help="Temperature in Celcius. Default is 23")
-    parser.add_argument('--rh', type=float, default=0.6,
-        help="Relative Humidity, 0 < rh < 1.0. Default is 0.6")
+    parser.add_argument('--loglevel', type=int, 
+        choices=range(logging.FATAL, logging.NOTSET, -10), 
+        default=logging.DEBUG, 
+        help=f"Logging level, defaults to {logging.DEBUG}")
 
+    parser.add_argument('--zap', action='store_true',
+        help=f"Remove {logfile} and create a new one.")
 
-    parser.add_argument('-n', type=int, default=4,
-        help="Number of axial harmonics to consider. Default is 4.")
+    parser.add_argument('-o', '--output', type=str, default=configfile)
 
-    parser.add_argument('-ht', '--height', type=float, default=2.5,
-        help="Height of the ceiling in meters. Default is 2.5")
-    parser.add_argument('-l', '--length', type=float, default=8.4,
-        help="Length of the room in meters.")
-    parser.add_argument('-w', '--width', type=float, default=6.1,
-        help="Width of the room in meters.")
-
-
-    parser.add_argument('-x', '--xpos', type=float, default=0,
-        help="Initial position of the speaker along the length (x axis) of the room.")
-    parser.add_argument('-y', '--ypos', type=float, default=0,
-        help="Initial position of the speaker along the width (y axis) of the room.")
-    parser.add_argument('-z', '--zpos', type=float, default=0,
-        help="Height of the speaker above the floor.")
-
-
-    parser.add_argument('-o', '--output', type=str, default="")
-
+    parser.add_argument('--config', type=str, default=configfile,
+        help=f"Read the optional configfile, {configfile}")
 
     myargs = parser.parse_args()
+    if myargs.zap:
+        try:
+            os.unlink(logfile)
+        except:
+            pass
+
+    logger = URLogger(logfile=logfile, level=myargs.loglevel)
+
+    try:
+        with open(myargs.config, 'rb') as f:
+            params = tomllib.load(f)
+        myargs = SloppyTree({**vars(myargs), **params})
+        logger.info(f"{myargs=}")
+
+    except Exception as e:
+        logger.error(str(e))
+        sys.exit(os.EX_CONFIG)
 
     try:
         outfile = sys.stdout if not myargs.output else open(myargs.output, 'w')
