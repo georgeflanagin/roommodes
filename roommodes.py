@@ -128,8 +128,6 @@ def calculate_speaker_position(length:float, width:float, height:float,
 def speed_of_sound(temperature:float, humidity:float) -> float:
     return 331.3 * math.sqrt(1+temperature/273.15) * (1 + 0.0124 * humidity)
 
-
-
 @trap
 def roommodes_main(myargs:SloppyTree) -> int:
     """
@@ -187,7 +185,7 @@ if __name__ == '__main__':
     parser.add_argument('--zap', action='store_true',
         help=f"Remove {logfile} and create a new one.")
 
-    parser.add_argument('-o', '--output', type=str, default=configfile)
+    parser.add_argument('-o', '--output', type=str, default="")
 
     parser.add_argument('--config', type=str, default=configfile,
         help=f"Read the optional configfile, {configfile}")
