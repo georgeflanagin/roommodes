@@ -20,17 +20,17 @@ height = 2.5
 #
 #  y dimension
 #  |
-#  |
+#  |                  length
 #  +-----------------------------------------+
 #  |                                         |
 #  |                                         |
 #  |  R                                      |
 #  |                                         |
-#  |                     =+                  |
-#  |                    | |                  |
-#  |                     =+                  |
-#  |                    | |                  |
-#  |                     =+                  |
+#  |                     =+                  | w
+#  |                    | |                  | i
+#  |                     =+                  | d
+#  |                    | |                  | t
+#  |                     =+                  | h
 #  |                                         |
 #  |  L                                      |
 #  |                                         |
@@ -55,4 +55,8 @@ zpos = 0.67
 ###
 n = 4 # number of harmonics to consider.
 cellsize = 0.1
+[modefactors]
+    axial = 1.0
+    tangential = 0.5
+    oblique = 0.25
 
