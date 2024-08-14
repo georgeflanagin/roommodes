@@ -12,9 +12,10 @@ rh = 0.6
 ###
 # Room dimensions in meters.
 ###
-length = 8.4
-width = 6.1
-height = 2.5
+[dimensions]
+    length = 8.4
+    width = 6.1
+    height = 2.5
 
 ###
 #
@@ -44,7 +45,6 @@ height = 2.5
 # Initial location of the L speaker relative to the
 # origin in the drawing in meters.
 ###
-
 xpos = 0.75
 ypos = 1.3
 zpos = 0.67
@@ -54,7 +54,21 @@ zpos = 0.67
 # Simulation parameters
 ###
 n = 4 # number of harmonics to consider.
+
+###
+# Increment of location change for the speaker[s].
+###
 cellsize = 0.1
+
+###
+# Cutoff frequency in Hz. Resonances above this 
+# frequency are ignored.
+###
+lowpass = 250
+
+# Relative strengths of modes. axial is assumed to be
+# 1.0 as a frame of reference. Only the ratios are 
+# important, not the magnitudes.
 [modefactors]
     axial = 1.0
     tangential = 0.5

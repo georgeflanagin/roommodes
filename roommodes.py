@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 """
 roommodes is a program to place speakers in rectangular rooms.
+
+    Calculate room modes and the effects on and by speaker
+    position. Speaker is considered to be a point source, and an
+    omnidirectional radiator.
 """
 import typing
 from   typing import *
@@ -55,50 +59,77 @@ __status__ = 'in progress'
 __license__ = 'MIT'
 
 
-def axial_mode_freq(dimension:float, n:int=4, cs:float=343) -> tuple:
+def axial_mode_freqs(dimension:float, 
+    n:int=4, 
+    cs:float=343,
+    cutoff:float=250) -> tuple:
     """
-    Generator to provide the axial mode frequency along the 
-    dimension given.
+    Calculate the axial mode frequency for the dimension given.
 
     dimension -- in meteres
-    n         -- number of modes to consider
-    cs        -- in meters / second
+    n         -- number of harmonics to consider
+    cs        -- speed of sound in m/s
+    cutoff    -- highest frequency to consider
 
     returns   -- tuple of Hz
     """
-    return tuple((cs / 2 * i / dimension) for i in range(1,n+1))
+    values = []
+    for i in range(1, n+1):
+        v = cs/2 * i/dimension
+        if v < cutoff:
+            values.append(v)
+        else:
+            break
+
+    return values
 
 
-def complex_mode_freq(*, 
-    length:float=0, width:float=0, height:float=0, cs:float=343) -> float:
+def complex_mode_freq(*, n:int=4, cutoff=250,
+    length:float=0, width:float=0, height:float=0, cs:float=343) -> tuple:
     """
     Calculate oblique or tangential mode frequencies.
+
+    cutoff  -- highest frequency to consider
+    n       -- number of harmonics to consider
+    cs      -- speed of sound in m/s
+    length  --\
+    width   -- *- dimensions of the room.
+    height  --/
+
+    returns -- tuple of up to n frequencies
     """
-    mode_number = 0
-    while True:
-        mode_number += 1
-        yield ((speed_of_sound / 2) * 
-        math.sqrt((x / length) ** 2 + (y / width) ** 2 + (z / height) ** 2))
+    values = []
+
+    for i in range(1, n+1):
+        v = ( (cs/2) * math.sqrt(
+            (i/length)**2 + (i/width)**2 + (i/height)**2
+            ))
+        if v < cutoff:
+            values.append(v)
+        else:
+            break
+
+    return tuple(values)
 
 
-def calculate_speaker_position(length:float, width:float, height:float, 
-    x_pos:float, y_pos:float, z_pos:float, cs:float, n:int) -> dict:
+def run_simulation(t:SloppyTree) -> dict:
     """
-    Return a dict whose keys are length, width, and height (x, y, z), and whose
-    values are tuples of length n. 
+    Using the values in the tree, calculate room modes and the 
+    proximity of the speakers to mode-positions.
     """
 
-    modes_x = axial_mode_freq(length, n, cs)
-    modes_y = axial_mode_freq(width, n, cs)
-    modes_z = axial_mode_freq(height, n, cs)
+    t.dimensions.length.dim = t.dimensions.length
+    t.dimensions.width.dim = t.dimensions.width
+    t.dimensions.heigth.dim = t.dimensions.height
+    t.dimensions.length.modes = axial_mode_freqs(t.dimensions.length.dim, t.n, t.cs, t.lowpass)
+    t.dimensions.width.modes  = axial_mode_freqs(t.dimensions.width.dim, t.n, t.cs, t.lowpass)
+    t.dimensions.height.modes = axial_mode_freqs(t.dimensions.height.dim, t.n, t.cs, t.lowpass)
     
-    print(f"""
-        {modes_x=}
-        {modes_y=}
-        {modes_z=}
-        """)
-
     proximity_x, proximity_y, proximity_z = ([], [], [])
+
+    for i, f in enumerate(t.dimensions.length.modes):
+        wavelength = t.cs / f
+        node_positions = [(n*wavelength)/2 for n in range(1, 
 
     for i, f in enumerate(modes_x, 1):
         wavelength = cs / f
@@ -125,15 +156,17 @@ def calculate_speaker_position(length:float, width:float, height:float,
         }
 
 
+def reporter(t:SloppyTree) -> None:
+    pass
+
+
 def speed_of_sound(temperature:float, humidity:float) -> float:
     return 331.3 * math.sqrt(1+temperature/273.15) * (1 + 0.0124 * humidity)
+
 
 @trap
 def roommodes_main(myargs:SloppyTree) -> int:
     """
-    Calculate room modes and the effects on and by speaker
-    position. Speaker is considered to be a point source, and an
-    omnidirectional radiator.
     """
     global logger
     config_error = False
@@ -142,7 +175,7 @@ def roommodes_main(myargs:SloppyTree) -> int:
         logger.error("x, y, and z should all be non-negative")
         config_error = True
 
-    if not all(_ > 0 for _ in (myargs.height, myargs.length, myargs.width)):
+    if not all(v > 0 for _, v in myargs.dimensions.items()):
         logger.error("height, width, and length should all be non-negative")
         config_error = True
 
@@ -154,14 +187,10 @@ def roommodes_main(myargs:SloppyTree) -> int:
         sys.stderr.write('Found a config error. Check {str(logger)}\n')
         sys.exit(os.EX_CONFIG)
     
-    cs = speed_of_sound(myargs.temp, myargs.rh)
-    logger.info(f"Speed of sound is {cs} m/s")
-    answer = calculate_speaker_position(
-        myargs.length, myargs.width, myargs.height, 
-        myargs.xpos, myargs.ypos, myargs.zpos, cs, myargs.n
-        )
-    
-    pprint(answer)
+    myargs.cs = speed_of_sound(myargs.temp, myargs.rh)
+    logger.info(f"Speed of sound is {myargs.cs} m/s")
+    answer = run_simulation(myargs)
+    reported(answer)
 
     return os.EX_OK
 
